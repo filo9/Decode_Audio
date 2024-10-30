@@ -2,14 +2,37 @@ import numpy as np
 import pyaudio
 from scipy.fft import fft
 
-def record_audio(duration=5, sample_rate=44100):
+def detect_frequency(chunk, sample_rate):
+    spectrum = np.abs(fft(chunk))[:len(chunk) // 2]
+    freqs = np.fft.fftfreq(len(spectrum), 1 / sample_rate)[:len(chunk) // 2]
+    return freqs[np.argmax(spectrum)]
+
+def record_audio_on_signal(start_freq=500, end_freq=250, sample_rate=44100, duration=0.5):
     p = pyaudio.PyAudio()
     stream = p.open(format=pyaudio.paInt16, channels=1, rate=sample_rate, input=True, frames_per_buffer=1024)
     frames = []
+    recording = False
 
-    for _ in range(int(sample_rate / 1024 * duration)):
+    while True:
         data = stream.read(1024)
-        frames.append(data)
+        audio_chunk = np.frombuffer(data, dtype=np.int16)
+
+        # 检测频率
+        dominant_freq = detect_frequency(audio_chunk, sample_rate)
+
+        # 开始标志检测
+        if not recording and abs(dominant_freq - start_freq) < 50:
+            recording = True
+            print("检测到开始标志，开始录音")
+
+        # 如果已开始录音，将音频数据添加到 frames
+        if recording:
+            frames.append(data)
+
+        # 检测结束标志
+        if recording and abs(dominant_freq - end_freq) < 50:
+            print("检测到结束标志，停止录音")
+            break
 
     stream.stop_stream()
     stream.close()
@@ -61,11 +84,7 @@ def decode_audio(audio_data, sample_rate, freq0=400, freq1=3000, duration=0.5):
                 continue
     return text
 
-# 示例：录音并解码
-audio_data, sample_rate = record_audio(duration=10)
+# 主程序：检测到启动信号后开始录音
+audio_data, sample_rate = record_audio_on_signal()
 decoded_text = decode_audio(audio_data, sample_rate)
 print("接收到wifi:", decoded_text)
-
-# 将解码后的数据保存到 wifi.txt 文件中
-with open("wifi.txt", "w", encoding="utf-8") as file:
-    file.write(decoded_text)
