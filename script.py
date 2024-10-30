@@ -14,7 +14,7 @@ def record_audio_on_signal(start_freq=500, end_freq=250, sample_rate=44100, dura
     stream = p.open(format=pyaudio.paInt16, channels=1, rate=sample_rate, input=True, frames_per_buffer=1024)
     frames = []
     recording = False
-    start_time = time.time()
+    start_time = None
 
     while True:
         data = stream.read(1024)
@@ -38,6 +38,7 @@ def record_audio_on_signal(start_freq=500, end_freq=250, sample_rate=44100, dura
                     consecutive_detection = 0
                 if consecutive_detection > 3:  # 连续多次检测到
                     recording = True
+                    start_time = time.time()  # 开始录音计时
                     print("检测到开始标志，开始录音")
                     break
 
@@ -45,10 +46,11 @@ def record_audio_on_signal(start_freq=500, end_freq=250, sample_rate=44100, dura
         if recording:
             frames.append(data)
 
-        # 检测到结束标志或超时
-        if recording and (abs(dominant_freq - end_freq) < 50 or time.time() - start_time > timeout):
-            print("检测到结束标志或超时，停止录音")
-            break
+        # 检测到结束标志或超时，加入最小录音时间检测
+        if recording and time.time() - start_time > 0.5:  # 确保至少录音0.5秒
+            if abs(dominant_freq - end_freq) < 50 or time.time() - start_time > timeout:
+                print("检测到结束标志或超时，停止录音")
+                break
 
     stream.stop_stream()
     stream.close()
