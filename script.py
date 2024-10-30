@@ -1,17 +1,20 @@
 import numpy as np
 import pyaudio
 from scipy.fft import fft
+import time
 
 def detect_frequency(chunk, sample_rate):
+    """检测主频率"""
     spectrum = np.abs(fft(chunk))[:len(chunk) // 2]
     freqs = np.fft.fftfreq(len(spectrum), 1 / sample_rate)[:len(chunk) // 2]
     return freqs[np.argmax(spectrum)]
 
-def record_audio_on_signal(start_freq=500, end_freq=250, sample_rate=44100, duration=0.5):
+def record_audio_on_signal(start_freq=500, end_freq=250, sample_rate=44100, duration=0.5, timeout=5):
     p = pyaudio.PyAudio()
     stream = p.open(format=pyaudio.paInt16, channels=1, rate=sample_rate, input=True, frames_per_buffer=1024)
     frames = []
     recording = False
+    start_time = time.time()
 
     while True:
         data = stream.read(1024)
@@ -20,18 +23,31 @@ def record_audio_on_signal(start_freq=500, end_freq=250, sample_rate=44100, dura
         # 检测频率
         dominant_freq = detect_frequency(audio_chunk, sample_rate)
 
-        # 开始标志检测
+        # 检测开始标志，需持续检测一段时间
         if not recording and abs(dominant_freq - start_freq) < 50:
-            recording = True
-            print("检测到开始标志，开始录音")
+            # 额外验证，连续检测到多次启动频率才正式开始录音
+            start_detection_time = time.time()
+            consecutive_detection = 0
+            while time.time() - start_detection_time < 0.5:  # 持续检测500毫秒
+                data = stream.read(1024)
+                audio_chunk = np.frombuffer(data, dtype=np.int16)
+                dominant_freq = detect_frequency(audio_chunk, sample_rate)
+                if abs(dominant_freq - start_freq) < 50:
+                    consecutive_detection += 1
+                else:
+                    consecutive_detection = 0
+                if consecutive_detection > 3:  # 连续多次检测到
+                    recording = True
+                    print("检测到开始标志，开始录音")
+                    break
 
-        # 如果已开始录音，将音频数据添加到 frames
+        # 若已开始录音，将数据添加到 frames
         if recording:
             frames.append(data)
 
-        # 检测结束标志
-        if recording and abs(dominant_freq - end_freq) < 50:
-            print("检测到结束标志，停止录音")
+        # 检测到结束标志或超时
+        if recording and (abs(dominant_freq - end_freq) < 50 or time.time() - start_time > timeout):
+            print("检测到结束标志或超时，停止录音")
             break
 
     stream.stop_stream()
