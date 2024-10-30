@@ -1,7 +1,7 @@
 import numpy as np
 import pyaudio
 from scipy.fft import fft
-import time
+
 
 def detect_frequency(chunk, sample_rate):
     """检测主频率"""
@@ -9,20 +9,22 @@ def detect_frequency(chunk, sample_rate):
     freqs = np.fft.fftfreq(len(spectrum), 1 / sample_rate)[:len(chunk) // 2]
     return freqs[np.argmax(spectrum)]
 
-def record_audio(sample_rate=80000, duration=10):
+
+def record_audio(sample_rate=80000, duration_per_bit=0.1):
     p = pyaudio.PyAudio()
     stream = p.open(format=pyaudio.paInt16, channels=1, rate=sample_rate, input=True, frames_per_buffer=1024)
     frames = []
 
-    print("开始录音...")
-    start_time = time.time()
+    print("按回车键开始录音...")
+    input()  # 等待用户按下回车开始录音
+    print("开始录音，按回车键停止录音")
 
     while True:
         data = stream.read(1024)
         frames.append(data)
 
-        # 如果录音时间超出设定的 duration，停止录音
-        if time.time() - start_time > duration:
+        # 检查是否按下回车键停止录音
+        if input() == "":
             print("录音结束")
             break
 
@@ -32,6 +34,7 @@ def record_audio(sample_rate=80000, duration=10):
 
     audio_data = np.frombuffer(b''.join(frames), dtype=np.int16)
     return audio_data, sample_rate
+
 
 def decode_audio(audio_data, sample_rate, freq0=500, freq1=10000, duration=0.1):
     chunk_size = int(sample_rate * duration)
@@ -67,7 +70,12 @@ def decode_audio(audio_data, sample_rate, freq0=500, freq1=10000, duration=0.1):
 
     return text
 
-# 主程序：录音并解码
+
+# 主程序：按回车键控制录音并解码
 audio_data, sample_rate = record_audio()
 decoded_text = decode_audio(audio_data, sample_rate)
 print("接收到的文本:", decoded_text)
+
+# 将解码后的数据保存到 wifi.txt 文件中
+with open("wifi.txt", "w", encoding="utf-8") as file:
+    file.write(decoded_text)
