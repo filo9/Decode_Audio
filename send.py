@@ -1,31 +1,59 @@
 import numpy as np
+import sounddevice as sd
 import wave
-import pyaudio
+import struct
 
-def text_to_wave(text, filename="output.wav", freq1=500, freq2=10000, duration=0.1):
-    # 二进制编码
-    binary = ''.join(format(ord(c), '08b') for c in text)
+# 配置参数
+SAMPLE_RATE = 80000  # 与Android端保持一致
+DURATION_MS = 100  # 每比特的持续时间（毫秒）
+FREQ0 = 500  # 表示“0”的频率
+FREQ1 = 10000  # 表示“1”的频率
+AMPLITUDE = 32767  # 音频振幅
 
-    # 生成音频信号
-    sample_rate = 80000  # 采样率
-    audio = []
 
-    for bit in binary:
-        freq = freq1 if bit == '0' else freq2
-        t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-        wave_data = 0.5 * np.sin(2 * np.pi * freq * t)
-        audio.extend(wave_data)
+# 将字符串转换为二进制字符串
+def string_to_binary(text):
+    return ''.join(format(ord(char), '08b') for char in text)
 
-    audio = np.array(audio, dtype=np.float32)
 
-    # 保存为WAV文件
-    with wave.open(filename, 'w') as f:
-        f.setnchannels(1)
-        f.setsampwidth(2)
-        f.setframerate(sample_rate)
-        f.writeframes((audio * 32767).astype(np.int16).tobytes())
+# 生成特定频率的音频信号
+def generate_tone(frequency, duration_ms):
+    num_samples = int(SAMPLE_RATE * (duration_ms / 1000.0))
+    t = np.linspace(0, duration_ms / 1000.0, num_samples, endpoint=False)
+    waveform = (AMPLITUDE * np.sin(2 * np.pi * frequency * t)).astype(np.int16)
+    return waveform
 
-    print(f"已生成音频文件: {filename}")
 
-# 示例：将"hello"转换为音频
-text_to_wave("15991503272hzthzt")
+# 播放并保存音频信号
+def send_and_save_audio_signal(binary_data, filename="audio_signal.wav"):
+    audio_data = np.array([], dtype=np.int16)
+
+    # 根据二进制数据生成音频信号
+    for bit in binary_data:
+        frequency = FREQ0 if bit == '0' else FREQ1
+        tone = generate_tone(frequency, DURATION_MS)
+        audio_data = np.concatenate((audio_data, tone))
+
+    # 播放音频信号
+    sd.play(audio_data, samplerate=SAMPLE_RATE)
+    sd.wait()
+
+    # 将音频信号保存为 .wav 文件
+    with wave.open(filename, 'wb') as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)  # 每个样本 2 字节 (16 位)
+        wf.setframerate(SAMPLE_RATE)
+        wf.writeframes(audio_data.tobytes())
+
+    print(f"音频信号已保存为 {filename}")
+
+
+# 主程序
+if __name__ == "__main__":
+    account = input("请输入WiFi账号: ")
+    password = input("请输入WiFi密码: ")
+    message = f"{account}:{password}"
+
+    # 转换为二进制数据并发送音频信号
+    binary_data = string_to_binary(message)
+    send_and_save_audio_signal(binary_data)
