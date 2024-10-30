@@ -1,15 +1,14 @@
 import numpy as np
 import pyaudio
 from scipy.fft import fft
-import wave
 
 def record_audio(duration=5, sample_rate=44100):
     p = pyaudio.PyAudio()
-    stream = p.open(format=pyaudio.paInt16, channels=1, rate=sample_rate, input=True, frames_per_buffer=2048)
+    stream = p.open(format=pyaudio.paInt16, channels=1, rate=sample_rate, input=True, frames_per_buffer=1024)
     frames = []
 
-    for _ in range(int(sample_rate / 2048 * duration)):
-        data = stream.read(2048)
+    for _ in range(int(sample_rate / 1024 * duration)):
+        data = stream.read(1024)
         frames.append(data)
 
     stream.stop_stream()
@@ -19,7 +18,7 @@ def record_audio(duration=5, sample_rate=44100):
     audio_data = np.frombuffer(b''.join(frames), dtype=np.int16)
     return audio_data, sample_rate
 
-def decode_audio(audio_data, sample_rate, freq0=500, freq1=5000, duration=0.4):
+def decode_audio(audio_data, sample_rate, freq0=400, freq1=3000, duration=0.5):
     chunk_size = int(sample_rate * duration)
     binary = ''
     threshold_value = 500  # 阈值，用于过滤噪声
@@ -29,11 +28,9 @@ def decode_audio(audio_data, sample_rate, freq0=500, freq1=5000, duration=0.4):
         if len(chunk) == 0:
             continue
 
-        # 计算FFT频谱
         spectrum = np.abs(fft(chunk))[:chunk_size // 2]
         freqs = np.fft.fftfreq(len(spectrum), 1 / sample_rate)[:chunk_size // 2]
 
-        # 找出主要频率，并设置阈值判断
         if np.max(spectrum) > threshold_value:
             dominant_freq = freqs[np.argmax(spectrum)]
             if abs(dominant_freq - freq0) < abs(dominant_freq - freq1):
@@ -41,10 +38,20 @@ def decode_audio(audio_data, sample_rate, freq0=500, freq1=5000, duration=0.4):
             else:
                 binary += '1'
 
-    # 改进二进制转文本部分
+    # 查找起始和结束标志
+    start_index = binary.find('00100011')  # '#' 的二进制代码
+    end_index = binary.rfind('00100011')
+
+    # 确保数据在起始和结束标志之间
+    if start_index != -1 and end_index != -1 and end_index > start_index:
+        data_binary = binary[start_index + 8:end_index]
+    else:
+        data_binary = binary  # 若未找到标志则直接尝试解码
+
+    # 二进制转文本
     text = ""
-    for i in range(0, len(binary), 8):
-        byte = binary[i:i + 8]
+    for i in range(0, len(data_binary), 8):
+        byte = data_binary[i:i + 8]
         if len(byte) == 8:
             try:
                 char = chr(int(byte, 2))
@@ -55,9 +62,9 @@ def decode_audio(audio_data, sample_rate, freq0=500, freq1=5000, duration=0.4):
     return text
 
 # 示例：录音并解码
-audio_data, sample_rate = record_audio(duration=15)
+audio_data, sample_rate = record_audio(duration=10)
 decoded_text = decode_audio(audio_data, sample_rate)
-print("接收到文本:", decoded_text)
+print("接收到wifi:", decoded_text)
 
 # 将解码后的数据保存到 wifi.txt 文件中
 with open("wifi.txt", "w", encoding="utf-8") as file:
