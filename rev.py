@@ -2,13 +2,13 @@ import numpy as np
 import pyaudio
 import wave
 from scipy.fft import fft
-
+import time
 # 参数配置
 SAMPLE_RATE = 80000  # 与发送端保持一致
 DURATION_PER_BIT = 0.1  # 每个比特的时长（秒）
 FREQ0 = 500  # 表示“0”的频率
 FREQ1 = 10000  # 表示“1”的频率
-
+OUTPUT_WAV_FILE = "audio_signal.wav"  # 保存录音的文件名
 
 # 检测频率
 def detect_frequency(chunk, sample_rate):
@@ -17,32 +17,32 @@ def detect_frequency(chunk, sample_rate):
     return freqs[np.argmax(spectrum)]
 
 
-# 录音
-def record_audio(sample_rate=SAMPLE_RATE):
+def record_audio(sample_rate=SAMPLE_RATE, record_seconds=10, buffer_size=30000):
     p = pyaudio.PyAudio()
-    stream = p.open(format=pyaudio.paInt16, channels=1, rate=sample_rate, input=True, frames_per_buffer=1024)
-    frames = []
+    stream = p.open(format=pyaudio.paInt16, channels=1, rate=sample_rate, input=True, frames_per_buffer=buffer_size)
 
-    print("按回车键开始录音...")
-    input()  # 等待用户按下回车键开始录音
-    print("开始录音，按回车键停止录音")
+    print("开始录音...")
 
-    while True:
-        data = stream.read(1024)
-        frames.append(data)
+    with wave.open(OUTPUT_WAV_FILE, 'wb') as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(p.get_sample_size(pyaudio.paInt16))
+        wf.setframerate(sample_rate)
 
-        if input() == "":  # 再次按回车键停止录音
-            print("录音结束")
-            break
+        start_time = time.time()
+        while time.time() - start_time < record_seconds:
+            try:
+                data = stream.read(buffer_size, exception_on_overflow=False)
+                wf.writeframes(data)  # 实时写入文件
+            except OSError as e:
+                print(f"警告: {e}")
+                continue
 
+    print("录音结束")
     stream.stop_stream()
     stream.close()
     p.terminate()
 
-    audio_data = np.frombuffer(b''.join(frames), dtype=np.int16)
-    return audio_data, sample_rate
-
-
+    print(f"音频已保存到 {OUTPUT_WAV_FILE}")
 # 从 .wav 文件读取音频数据
 def read_wav_file(file_path):
     with wave.open(file_path, 'rb') as wf:
@@ -50,7 +50,6 @@ def read_wav_file(file_path):
         frames = wf.readframes(wf.getnframes())
         audio_data = np.frombuffer(frames, dtype=np.int16)
     return audio_data, sample_rate
-
 
 # 解码音频信号
 def decode_audio(audio_data, sample_rate, freq0=FREQ0, freq1=FREQ1, duration=DURATION_PER_BIT):
@@ -84,7 +83,6 @@ def decode_audio(audio_data, sample_rate, freq0=FREQ0, freq1=FREQ1, duration=DUR
 
     return text
 
-
 # 主程序
 def main():
     choice = input("选择输入方式：1. 录音  2. 从文件读取 (输入1或2): ")
@@ -92,7 +90,7 @@ def main():
     if choice == "1":
         audio_data, sample_rate = record_audio()
     elif choice == "2":
-        file_path = "./audio_signal.wav"  # 根目录的 .wav 文件路径
+        file_path = OUTPUT_WAV_FILE  # 默认读取录制的 .wav 文件
         audio_data, sample_rate = read_wav_file(file_path)
     else:
         print("无效选择")
@@ -105,7 +103,6 @@ def main():
     with open("wifi.txt", "w", encoding="utf-8") as file:
         file.write(decoded_text)
     print("解码结果已保存到 wifi.txt")
-
 
 if __name__ == "__main__":
     main()
