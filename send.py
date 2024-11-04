@@ -4,8 +4,8 @@ import wave
 import struct
 
 # 配置参数
-SAMPLE_RATE = 80000  # 与Android端保持一致
-DURATION_MS = 100  # 每比特的持续时间（毫秒）
+SAMPLE_RATE = 48000  # 与Android端保持一致
+DURATION_MS = 10  # 每比特的持续时间（毫秒）
 FREQ0 = 500  # 表示“0”的频率
 FREQ1 = 10000  # 表示“1”的频率
 AMPLITUDE = 32767  # 音频振幅
